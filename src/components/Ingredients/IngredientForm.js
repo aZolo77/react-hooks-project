@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 
 import Card from '../UI/Card';
+import LoadingIndicator from '../UI/LoadingIndicator';
 import './IngredientForm.css';
 
-const IngredientForm = React.memo(({ onAddIngredient }) => {
+const IngredientForm = React.memo(({ onAddIngredient, loading }) => {
   // * multiple States
   // ? returns an array with 2 elements: pointer to the current state and a function to update it
   const [enteredTitle, setEnteredTitle] = useState('');
@@ -42,6 +43,7 @@ const IngredientForm = React.memo(({ onAddIngredient }) => {
           </div>
           <div className="ingredient-form__actions">
             <button type="submit">Add Ingredient</button>
+            {loading && <LoadingIndicator />}
           </div>
         </form>
       </Card>
