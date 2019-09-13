@@ -1,73 +1,96 @@
-import React, { useState, useCallback } from 'react';
+import React, { useReducer, useCallback, useMemo, useEffect } from 'react';
+import useHttp from '../../hooks/http';
 
 import IngredientForm from './IngredientForm';
 import Search from './Search';
 import IngredientList from './IngredientList';
 import ErrorModal from '../UI/ErrorModal';
 
+const ingredientReducer = (currentIngredients, action) => {
+  switch (action.type) {
+    case 'SET':
+      return action.ingredients;
+    case 'ADD':
+      return [...currentIngredients, action.ingredient];
+    case 'DELETE':
+      return currentIngredients.filter(ing => ing.id !== action.id);
+
+    default:
+      throw new Error();
+  }
+};
+
 const Ingredients = () => {
-  const [userIngredients, setUserIngredients] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState();
+  // * alternative to {useState} hook to manipulte complex State
+  const [userIngredients, dispatch] = useReducer(ingredientReducer, []);
+  // * custom hook
+  const {
+    isLoading,
+    error,
+    data,
+    sendRequest,
+    reqExtra,
+    identifier,
+    clear
+  } = useHttp();
 
-  const addIngredientHandler = ingredient => {
-    setIsLoading(true);
-    fetch('https://react-hooks-project-a0bf9.firebaseio.com/ingredients.json', {
-      method: 'POST',
-      body: JSON.stringify(ingredient),
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    })
-      .then(res => {
-        setIsLoading(false);
-        return res.json();
-      })
-      .then(data => {
-        setUserIngredients(prevState => [
-          ...prevState,
-          { id: data.name, ...ingredient }
-        ]);
-      })
-      .catch(err => {
-        // * обновление нескольких состояний в одном синхронном обработчике происходит одним пакетом
-        setIsLoading(false);
-        setError('Something went wrong!');
-      });
-  };
+  // * this code is executed after component was rendered and for every render cycle
+  // * acts like componentDidMount fn
+  useEffect(() => {
+    if (!isLoading && !error && identifier === 'REMOVE_INGREDIENT') {
+      dispatch({ type: 'DELETE', id: reqExtra });
+    }
+    if (!isLoading && !error && identifier === 'ADD_INGREDIENT') {
+      dispatch({ type: 'ADD', ingredient: { id: data.name, ...reqExtra } });
+    }
+  }, [data, reqExtra, identifier, isLoading, error]);
 
-  const removeIngredientHandler = ingId => {
-    setIsLoading(true);
-    fetch(
-      `https://react-hooks-project-a0bf9.firebaseio.com/ingredients/${ingId}.json`,
-      {
-        method: 'DELETE'
-      }
-    )
-      .then(res => {
-        setIsLoading(false);
-        setUserIngredients(prevIngs =>
-          prevIngs.filter(ing => ing.id !== ingId)
-        );
-      })
-      .catch(err => {
-        setIsLoading(false);
-        setError('Something went wrong!');
-      });
-  };
+  const addIngredientHandler = useCallback(
+    ingredient => {
+      sendRequest(
+        'https://react-hooks-project-a0bf9.firebaseio.com/ingredients.json',
+        'POST',
+        JSON.stringify(ingredient),
+        ingredient,
+        'ADD_INGREDIENT'
+      );
+    },
+    [sendRequest]
+  );
+
+  const removeIngredientHandler = useCallback(
+    ingId => {
+      sendRequest(
+        `https://react-hooks-project-a0bf9.firebaseio.com/ingredients/${ingId}.json`,
+        'DELETE',
+        null,
+        ingId,
+        'REMOVE_INGREDIENT'
+      );
+    },
+    [sendRequest]
+  );
 
   // * useCallback caches fn
-  const filterIngsHandler = useCallback(ings => {
-    setUserIngredients(ings);
+  const filterIngsHandler = useCallback(ingredients => {
+    dispatch({ type: 'SET', ingredients });
   }, []);
 
-  const clearErrorHandler = () => {
-    setError();
-  };
+  // * useMemo() rerenders component only when its dependencies were changed
+  // ? alternative to React.memo()
+  const ingredientList = useMemo(() => {
+    return (
+      <IngredientList
+        ingredients={userIngredients}
+        onRemoveItem={removeIngredientHandler}
+      />
+    );
+  }, [userIngredients, removeIngredientHandler]);
 
   return (
     <div className="App">
-      {error && <ErrorModal onClose={clearErrorHandler}>{error}</ErrorModal>}
+      {error && <ErrorModal onClose={clear}>{error}</ErrorModal>}
+
       <IngredientForm
         onAddIngredient={addIngredientHandler}
         loading={isLoading}
@@ -75,10 +98,7 @@ const Ingredients = () => {
 
       <section>
         <Search onLoadIngredients={filterIngsHandler} />
-        <IngredientList
-          ingredients={userIngredients}
-          onRemoveItem={removeIngredientHandler}
-        />
+        {ingredientList}
       </section>
     </div>
   );
